@@ -23,5 +23,43 @@ jobs:
         with:
           java-version: 11
 
+      - name: Add keystore
+        run: |
+          echo "::add-mask::$BLOKADA_KEY_STORE";
+          echo "::add-mask::$BLOKADA_STORE_PASSWORD";
+          echo "::add-mask::$BLOKADA_KEY_PASSWORD";
+          echo "$BLOKADA_KEY_STORE" | base64 --decode > "$BLOKADA_KEY_PATH";
+          {
+            echo "BLOKADA_KEY_PATH=$BLOKADA_KEY_PATH";
+            echo "BLOKADA_STORE_PASSWORD=$BLOKADA_STORE_PASSWORD";
+            echo "BLOKADA_KEY_PASSWORD=$BLOKADA_KEY_PASSWORD";
+          } > keystore.properties
+        shell: bash
+        env:
+          BLOKADA_KEY_PATH: .keystore
+          BLOKADA_KEY_STORE: ${{ secrets.KEYSTORE }}
+          BLOKADA_STORE_PASSWORD: ${{ secrets.BLOKADA_STORE_PASSWORD }}
+          BLOKADA_KEY_PASSWORD: ${{ secrets.BLOKADA_KEY_PASSWORD }}
+
+      - name: Generate Tag name for release
+        run: |
+          echo "tag=build-$(date -I)-$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+        id: release_tag
+
       - name: Build app
         run: ./gradlew assembleFiveRelease
+
+      - name: Find APK file
+        id: find_apk
+        run: |
+          apk_path=$(find app/build/outputs/ -name '*.apk' | head -n 1)
+          echo "apk_path=$apk_path" >> $GITHUB_OUTPUT
+
+      - name: Create tagged release
+        uses: softprops/action-gh-release@v1
+        with:
+          draft: false
+          files: ${{ steps.find_apk.outputs.apk_path }}
+          tag_name: ${{ steps.release_tag.outputs.tag }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
